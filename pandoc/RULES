@@ -150,13 +150,14 @@
   }
 , "standalone":
   { "doc": ["Create a standalone document from the given inputs"]
-  , "target_fields": ["srcs", "template"]
+  , "target_fields": ["srcs", "template", "data"]
   , "string_fields": ["out", "meta data"]
   , "field_doc":
     { "srcs":
       [ "The files to build the document from, in order."
       , "Honors the order within a [\"files\", \"ordered\"] target."
       ]
+    , "data": ["Additional files needed for building (e.g., images)"]
     , "out":
       ["The name of the output file.", "Must not conflict with input files."]
     , "template": ["The template definition to use"]
@@ -211,9 +212,34 @@
           , "$1": {"type": "var", "name": "srcs"}
           }
         ]
-      , [ "data"
+      , [ "extra"
         , { "type": "disjoint_map_union"
           , "msg": "Data files may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "data"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "extra"
+        , { "type": "to_subdir"
+          , "subdir": "data"
+          , "$1": {"type": "var", "name": "extra"}
+          }
+        ]
+      , [ "data"
+        , { "type": "disjoint_map_union"
+          , "msg": "Template files may not conflict"
           , "$1":
             { "type": "foreach"
             , "var": "x"
@@ -233,7 +259,14 @@
       , [ "data"
         , { "type": "to_subdir"
           , "subdir": "data"
-          , "$1": {"type": "var", "name": "data"}
+          , "$1":
+            { "type": "disjoint_map_union"
+            , "msg": "Template may not contain a \"data\" directory"
+            , "$1":
+              [ {"type": "var", "name": "data"}
+              , {"type": "var", "name": "extra"}
+              ]
+            }
           }
         ]
       , [ "lua filters"
