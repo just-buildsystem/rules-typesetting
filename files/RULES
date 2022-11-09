@@ -1,0 +1,61 @@
+{ "ordered":
+  { "doc":
+    [ "Collect the runfiles and artifacts of the \"srcs\" targets, keeping"
+    , "record of the order of the targets (in a provider). In this way,"
+    , "a sequence of files can be described at a single place and used later"
+    , "in several targets where order matters and the respective provider is"
+    , "supported. As this rule supports its own provider, chaining is possible."
+    ]
+  , "target_fields": ["srcs"]
+  , "field_doc":
+    { "srcs":
+      [ "The files to include, in order. For targets that are defined by this"
+      , "rule, the provided order in honored."
+      ]
+    }
+  , "artifacts_doc":
+    [ "The runfiles and artifacts of the \"srcs\" field."
+    , "Within each target, artifacts take precedence; different targets in"
+    , "the \"srcs\" field may not conflict"
+    ]
+  , "runfiles_doc": ["Same as artifacts"]
+  , "provides_doc":
+    {"keys": ["The keys of the artifacts in the intended order."]}
+  , "imports": {"order": "order"}
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "srcs"
+        , { "type": "disjoint_map_union"
+          , "msg": "Sources may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "srcs"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , ["order", {"type": "CALL_EXPRESSION", "name": "order"}]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "runfiles": {"type": "var", "name": "srcs"}
+      , "artifacts": {"type": "var", "name": "srcs"}
+      , "provides":
+        { "type": "singleton_map"
+        , "key": "keys"
+        , "value": {"type": "var", "name": "order"}
+        }
+      }
+    }
+  }
+}

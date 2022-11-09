@@ -1,0 +1,404 @@
+{ "template":
+  { "doc": ["Create a pandoc template with arguments"]
+  , "string_fields": ["name", "args"]
+  , "target_fields": ["data", "lua filters"]
+  , "field_doc":
+    { "name": ["Name of the template to use"]
+    , "args": ["Additional pandoc arguments"]
+    , "data": ["Template data files"]
+    , "lua filters": ["Files that should be used as lua filters"]
+    }
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "data"
+        , { "type": "disjoint_map_union"
+          , "msg": "Data files may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "data"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "lua filters"
+        , { "type": "disjoint_map_union"
+          , "msg": "Lua filters may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "lua filters"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "artifacts": {"type": "var", "name": "data"}
+      , "runfiles": {"type": "var", "name": "data"}
+      , "provides":
+        { "type": "map_union"
+        , "$1":
+          [ { "type": "singleton_map"
+            , "key": "template-name"
+            , "value":
+              {"type": "join", "$1": {"type": "FIELD", "name": "name"}}
+            }
+          , { "type": "singleton_map"
+            , "key": "template-args"
+            , "value": {"type": "FIELD", "name": "args"}
+            }
+          , { "type": "singleton_map"
+            , "key": "lua filters"
+            , "value": {"type": "var", "name": "lua filters"}
+            }
+          ]
+        }
+      }
+    }
+  }
+, "metadata":
+  { "doc":
+    ["Generate a file with meta data from data provided through context"]
+  , "config_vars": ["SOURCE_DATE_EPOCH", "DATE_FORMAT"]
+  , "config_doc":
+    { "SOURCE_DATE_EPOCH":
+      [ "The timestamp to include (in seconds since Jan 1, 1970 00:00 UTC);"
+      , "ignored if unset or value is 0."
+      ]
+    , "DATE_FORMAT":
+      ["The format to use for time stamps (defaults to \"%Y-%m-%d %H:%M\")."]
+    }
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "script"
+        , { "type": "join"
+          , "separator": "\n"
+          , "$1":
+            { "type": "++"
+            , "$1":
+              [ ["echo", "echo ---"]
+              , { "type": "if"
+                , "cond": {"type": "var", "name": "SOURCE_DATE_EPOCH"}
+                , "then":
+                  [ { "type": "join_cmd"
+                    , "$1":
+                      [ "date"
+                      , "-d"
+                      , { "type": "join"
+                        , "$1":
+                          [ "@"
+                          , { "type": "json_encode"
+                            , "$1":
+                              {"type": "var", "name": "SOURCE_DATE_EPOCH"}
+                            }
+                          ]
+                        }
+                      , { "type": "join"
+                        , "$1":
+                          [ "+date: \""
+                          , { "type": "var"
+                            , "name": "DATE_FORMAT"
+                            , "default": "%Y-%m-%d %H:%M"
+                            }
+                          , "\""
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              , ["echo ---", "echo\n"]
+              ]
+            }
+          }
+        ]
+      , [ "data"
+        , { "type": "ACTION"
+          , "cmd": ["sh", "-c", "sh ./generate > metadata.yaml"]
+          , "outs": ["metadata.yaml"]
+          , "inputs":
+            { "type": "singleton_map"
+            , "key": "generate"
+            , "value":
+              {"type": "BLOB", "data": {"type": "var", "name": "script"}}
+            }
+          }
+        ]
+      ]
+    , "body": {"type": "RESULT", "artifacts": {"type": "var", "name": "data"}}
+    }
+  }
+, "standalone":
+  { "doc": ["Create a standalone document from the given inputs"]
+  , "target_fields": ["srcs", "template"]
+  , "string_fields": ["out", "meta data"]
+  , "field_doc":
+    { "srcs":
+      [ "The files to build the document from, in order."
+      , "Honors the order within a [\"files\", \"ordered\"] target."
+      ]
+    , "out":
+      ["The name of the output file.", "Must not conflict with input files."]
+    , "template": ["The template definition to use"]
+    , "meta data":
+      [ "Additional meta data to be set. Each entry has to have the"
+      , "form \"key=value\"."
+      ]
+    }
+  , "config_vars": ["env"]
+  , "config_doc":
+    { "env":
+      [ "Any override to the default environment which sets only"
+      , "PATH, SOURCE_DATE_EPOCH, and TEXINPUTS"
+      ]
+    }
+  , "implicit": {"metadata": [["./", ".", "metadata"]]}
+  , "imports":
+    { "src names": ["./", "../files", "order"]
+    , "stage": ["./", "..", "stage_singleton_field"]
+    }
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "out"
+        , { "type": "assert_non_empty"
+          , "msg": "A valid output name has to be provided"
+          , "$1": {"type": "join", "$1": {"type": "FIELD", "name": "out"}}
+          }
+        ]
+      , [ "srcs"
+        , { "type": "disjoint_map_union"
+          , "msg": "Sources may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "srcs"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "srcs"
+        , { "type": "to_subdir"
+          , "subdir": "srcs"
+          , "$1": {"type": "var", "name": "srcs"}
+          }
+        ]
+      , [ "data"
+        , { "type": "disjoint_map_union"
+          , "msg": "Data files may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "template"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "data"
+        , { "type": "to_subdir"
+          , "subdir": "data"
+          , "$1": {"type": "var", "name": "data"}
+          }
+        ]
+      , [ "lua filters"
+        , { "type": "disjoint_map_union"
+          , "msg": "Lua filters may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "template"}
+            , "body":
+              { "type": "DEP_PROVIDES"
+              , "provider": "lua filters"
+              , "dep": {"type": "var", "name": "x"}
+              }
+            }
+          }
+        ]
+      , [ "lua filters"
+        , { "type": "to_subdir"
+          , "subdir": "lua"
+          , "$1": {"type": "var", "name": "lua filters"}
+          }
+        ]
+      , [ "template-name"
+        , { "type": "join"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "template"}
+            , "body":
+              { "type": "DEP_PROVIDES"
+              , "dep": {"type": "var", "name": "x"}
+              , "provider": "template-name"
+              , "default": "default"
+              }
+            }
+          }
+        ]
+      , [ "template-args"
+        , { "type": "++"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "template"}
+            , "body":
+              { "type": "DEP_PROVIDES"
+              , "dep": {"type": "var", "name": "x"}
+              , "provider": "template-args"
+              }
+            }
+          }
+        ]
+      , [ "_"
+        , { "type": "if"
+          , "cond":
+            { "type": "lookup"
+            , "map": {"type": "var", "name": "srcs"}
+            , "key": {"type": "var", "name": "out"}
+            }
+          , "then":
+            { "type": "fail"
+            , "msg":
+              [ "Output must be disjoint from inputs."
+              , "Output file name is"
+              , {"type": "var", "name": "out"}
+              , "input files are"
+              , {"type": "keys", "$1": {"type": "var", "name": "srcs"}}
+              ]
+            }
+          }
+        ]
+      , ["src names", {"type": "CALL_EXPRESSION", "name": "src names"}]
+      , [ "src names"
+        , { "type": "foreach"
+          , "var": "name"
+          , "range": {"type": "var", "name": "src names"}
+          , "body":
+            {"type": "join", "$1": ["srcs/", {"type": "var", "name": "name"}]}
+          }
+        ]
+      , [ "meta data args"
+        , { "type": "++"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "meta data"}
+            , "body": ["-M", {"type": "var", "name": "x"}]
+            }
+          }
+        ]
+      , [ "filter args"
+        , { "type": "++"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range":
+              {"type": "keys", "$1": {"type": "var", "name": "lua filters"}}
+            , "body": ["--lua-filter", {"type": "var", "name": "x"}]
+            }
+          }
+        ]
+      , [ "env"
+        , { "type": "map_union"
+          , "$1":
+            [ { "type": "singleton_map"
+              , "key": "PATH"
+              , "value": "/bin:/usr/bin:/usr/local/bin"
+              }
+            , { "type": "singleton_map"
+              , "key": "SOURCE_DATE_EPOCH"
+              , "value": "0"
+              }
+            , {"type": "singleton_map", "key": "TEXINPUTS", "value": "data:"}
+            , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
+            ]
+          }
+        ]
+      , [ "metadata"
+        , { "type": "let*"
+          , "bindings":
+            [["fieldname", "metadata"], ["location", "metadata.yaml"]]
+          , "body": {"type": "CALL_EXPRESSION", "name": "stage"}
+          }
+        ]
+      , [ "generated"
+        , { "type": "ACTION"
+          , "inputs":
+            { "type": "map_union"
+            , "$1":
+              [ {"type": "var", "name": "srcs"}
+              , {"type": "var", "name": "data"}
+              , {"type": "var", "name": "lua filters"}
+              , {"type": "var", "name": "metadata"}
+              ]
+            }
+          , "outs": [{"type": "var", "name": "out"}]
+          , "env": {"type": "var", "name": "env"}
+          , "cmd":
+            { "type": "++"
+            , "$1":
+              [ [ "pandoc"
+                , "--data-dir=./data"
+                , "--resource-path=./data"
+                , "-o"
+                , {"type": "var", "name": "out"}
+                , "-s"
+                , "-N"
+                ]
+              , { "type": "if"
+                , "cond": {"type": "var", "name": "template-name"}
+                , "then":
+                  ["--template", {"type": "var", "name": "template-name"}]
+                }
+              , ["--metadata-file", "metadata.yaml"]
+              , {"type": "var", "name": "template-args"}
+              , {"type": "var", "name": "filter args"}
+              , {"type": "var", "name": "meta data args"}
+              , {"type": "var", "name": "src names"}
+              ]
+            }
+          }
+        ]
+      ]
+    , "body":
+      {"type": "RESULT", "artifacts": {"type": "var", "name": "generated"}}
+    }
+  }
+}

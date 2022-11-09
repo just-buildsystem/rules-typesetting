@@ -1,0 +1,314 @@
+{ "standalone":
+  { "doc":
+    [ "A standalone latex run"
+    , ""
+    , "Define a pdf file as the output of running pdflatex. A correct staging"
+    , "of the needed files has to be given through the runfiles of \"deps\"."
+    ]
+  , "target_fields": ["deps", "srcs"]
+  , "string_fields": ["main", "stage"]
+  , "field_doc":
+    { "srcs": ["The files needed for the latex run."]
+    , "stage":
+      [ "The directory the \"srcs\" logically reside in."
+      , "Entries are joined with \"/\"."
+      ]
+    , "deps":
+      ["Runfiles needed for the run of the standalone latex invocation"]
+    , "main":
+      [ "The entry point for the latex run; should be the base name"
+      , "of a .tex file in \"srcs\"; the \"stage\" is prepended automatically."
+      ]
+    }
+  , "config_fields": ["env", "latex"]
+  , "config_doc":
+    { "latex": ["Name of the latex command, defaults to \"pdflatex\"."]
+    , "env":
+      [ "Any override to the default environment which sets only"
+      , "PATH and SOURCE_DATE_EPOCH"
+      ]
+    }
+  , "implicit": {"runner": ["latex_runner.sh"]}
+  , "imports": {"singleton": ["./", "..", "stage_singleton_field"]}
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "stage"
+        , { "type": "join"
+          , "separator": "/"
+          , "$1": {"type": "FIELD", "name": "stage"}
+          }
+        ]
+      , [ "srcs"
+        , { "type": "disjoint_map_union"
+          , "msg": "Sources may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "srcs"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "main"
+        , { "type": "assert_non_empty"
+          , "msg": "Entry-point main cannot be empty"
+          , "$1": {"type": "join", "$1": {"type": "FIELD", "name": "main"}}
+          }
+        ]
+      , [ "_"
+        , { "type": "if"
+          , "cond":
+            { "type": "=="
+            , "$1":
+              { "type": "lookup"
+              , "map": {"type": "var", "name": "srcs"}
+              , "key":
+                { "type": "join"
+                , "$1": [{"type": "var", "name": "main"}, ".tex"]
+                }
+              }
+            , "$2": null
+            }
+          , "then":
+            { "type": "fail"
+            , "msg":
+              [ "main not the base name of a .tex file in srcs"
+              , "main has value"
+              , {"type": "var", "name": "main"}
+              , "srcs have file names"
+              , {"type": "keys", "$1": {"type": "var", "name": "srcs"}}
+              ]
+            }
+          }
+        ]
+      , [ "main"
+        , { "type": "if"
+          , "cond":
+            {"type": "==", "$1": {"type": "var", "name": "stage"}, "$2": ""}
+          , "then": {"type": "var", "name": "main"}
+          , "else":
+            { "type": "join"
+            , "separator": "/"
+            , "$1":
+              [ {"type": "var", "name": "stage"}
+              , {"type": "var", "name": "main"}
+              ]
+            }
+          }
+        ]
+      , [ "srcs"
+        , { "type": "to_subdir"
+          , "subdir": {"type": "var", "name": "stage"}
+          , "$1": {"type": "var", "name": "srcs"}
+          }
+        ]
+      , [ "deps"
+        , { "type": "disjoint_map_union"
+          , "msg": "Dependencies may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "FIELD", "name": "deps"}
+            , "body":
+              {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+            }
+          }
+        ]
+      , [ "tex inputs"
+        , { "type": "to_subdir"
+          , "subdir": "work"
+          , "$1":
+            { "type": "disjoint_map_union"
+            , "msg": "Staging conflict between staged sources and deps"
+            , "$1":
+              [ {"type": "var", "name": "deps"}
+              , {"type": "var", "name": "srcs"}
+              ]
+            }
+          }
+        ]
+      , [ "env"
+        , { "type": "map_union"
+          , "$1":
+            [ { "type": "singleton_map"
+              , "key": "PATH"
+              , "value": "/bin:/usr/bin:/usr/local/bin"
+              }
+            , { "type": "singleton_map"
+              , "key": "SOURCE_DATE_EPOCH"
+              , "value": "0"
+              }
+            , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
+            ]
+          }
+        ]
+      , [ "runner"
+        , { "type": "let*"
+          , "bindings": [["fieldname", "runner"], ["location", "runner"]]
+          , "body": {"type": "CALL_EXPRESSION", "name": "singleton"}
+          }
+        ]
+      , [ "cmd"
+        , [ "./runner"
+          , {"type": "var", "name": "latex", "default": "pdflatex"}
+          , {"type": "var", "name": "main"}
+          ]
+        ]
+      , [ "pdf"
+        , { "type": "ACTION"
+          , "inputs":
+            { "type": "map_union"
+            , "$1":
+              [ {"type": "var", "name": "tex inputs"}
+              , {"type": "var", "name": "runner"}
+              ]
+            }
+          , "outs":
+            [ { "type": "join"
+              , "$1": ["work/", {"type": "var", "name": "main"}, ".pdf"]
+              }
+            ]
+          , "cmd": {"type": "var", "name": "cmd"}
+          , "env": {"type": "var", "name": "env"}
+          }
+        ]
+      , [ "pdf"
+        , { "type": "map_union"
+          , "$1":
+            { "type": "foreach_map"
+            , "var_key": "name"
+            , "var_val": "file"
+            , "range": {"type": "var", "name": "pdf"}
+            , "body":
+              { "type": "singleton_map"
+              , "key":
+                {"type": "basename", "$1": {"type": "var", "name": "name"}}
+              , "value": {"type": "var", "name": "file"}
+              }
+            }
+          }
+        ]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "artifacts": {"type": "var", "name": "pdf"}
+      , "runfiles": {"type": "var", "name": "pdf"}
+      }
+    }
+  }
+, "verbatim":
+  { "doc": ["Add \\begin{verbatim}...\\end{verbatim} around files"]
+  , "target_fields": ["srcs"]
+  , "string_fields": ["prefix", "stage"]
+  , "field_doc":
+    { "srcs":
+      [ "The files to transform to tex files containing them verbatim."
+      , "In the output file, the ending is changed to .tex"
+      ]
+    , "prefix": ["Additional prefix to add to the output file name"]
+    , "stage": ["The logical directory to stage the outputs to"]
+    }
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "srcs"
+        , { "type": "disjoint_map_union"
+          , "msg": "Source files must not overlap, as this would lead to overlapping output"
+          , "$1":
+            { "type": "foreach"
+            , "var": "src"
+            , "range": {"type": "FIELD", "name": "srcs"}
+            , "body":
+              {"type": "DEP_ARTIFACTS", "dep": {"type": "var", "name": "src"}}
+            }
+          }
+        ]
+      , [ "verbatim files"
+        , { "type": "disjoint_map_union"
+          , "msg":
+            [ "Outputfiles must not overlap"
+            , "Input file names:"
+            , {"type": "keys", "map": {"type": "var", "name": "srcs"}}
+            ]
+          , "$1":
+            { "type": "foreach_map"
+            , "var_key": "src"
+            , "var_val": "input"
+            , "range": {"type": "var", "name": "srcs"}
+            , "body":
+              { "type": "let*"
+              , "bindings":
+                [ [ "action out"
+                  , { "type": "ACTION"
+                    , "inputs":
+                      { "type": "singleton_map"
+                      , "key": "in"
+                      , "value": {"type": "var", "name": "input"}
+                      }
+                    , "outs": ["out"]
+                    , "cmd":
+                      [ "sh"
+                      , "-c"
+                      , "echo '\\\\begin{verbatim}' > out && cat in >> out && echo '\\\\end{verbatim}' >> out"
+                      ]
+                    }
+                  ]
+                , [ "out"
+                  , { "type": "lookup"
+                    , "map": {"type": "var", "name": "action out"}
+                    , "key": "out"
+                    }
+                  ]
+                , [ "out name"
+                  , { "type": "join"
+                    , "$1":
+                      [ { "type": "join"
+                        , "$1": {"type": "FIELD", "name": "prefix"}
+                        }
+                      , { "type": "change_ending"
+                        , "ending": ".tex"
+                        , "$1": {"type": "var", "name": "src"}
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              , "body":
+                { "type": "singleton_map"
+                , "key": {"type": "var", "name": "out name"}
+                , "value": {"type": "var", "name": "out"}
+                }
+              }
+            }
+          }
+        ]
+      , [ "stage"
+        , { "type": "join"
+          , "separator": "/"
+          , "$1": {"type": "FIELD", "name": "stage"}
+          }
+        ]
+      , [ "staged verbatim files"
+        , { "type": "to_subdir"
+          , "subdir": {"type": "var", "name": "stage"}
+          , "$1": {"type": "var", "name": "verbatim files"}
+          }
+        ]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "artifacts": {"type": "var", "name": "staged verbatim files"}
+      , "runfiles": {"type": "var", "name": "staged verbatim files"}
+      }
+    }
+  }
+}

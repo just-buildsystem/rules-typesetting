@@ -1,0 +1,122 @@
+{ "family":
+  { "doc":
+    [ "From a single eps file, create many,"
+    , "with /stage set to different values."
+    ]
+  , "target_fields": ["src"]
+  , "string_fields": ["stages", "stage", "drawbb", "name"]
+  , "field_doc":
+    { "src": ["The single eps source file the variations are taken from"]
+    , "stages": ["The values of /stage for wich a file should be generated."]
+    , "drawbb": ["If non-empty, set drawbb to true, else to false"]
+    , "stage": ["The logical directory to stage the output to"]
+    , "name":
+      [ "The base name of the output files"
+      , "The stage name will be appended, separated by \"_\", and the ending \".eps\" will be added"
+      ]
+    }
+  , "imports": {"stage_field": ["./", "..", "stage_singleton_field"]}
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "stage"
+        , { "type": "join"
+          , "separator": "/"
+          , "$1": {"type": "FIELD", "name": "stage"}
+          }
+        ]
+      , ["name", {"type": "join", "$1": {"type": "FIELD", "name": "name"}}]
+      , [ "drawbb"
+        , { "type": "if"
+          , "cond": {"type": "FIELD", "name": "drawbb"}
+          , "then": "true"
+          , "else": "false"
+          }
+        ]
+      , [ "src.eps"
+        , { "type": "let*"
+          , "bindings": [["fieldname", "src"], ["location", "src.eps"]]
+          , "body": {"type": "CALL_EXPRESSION", "name": "stage_field"}
+          }
+        ]
+      , [ "outputs"
+        , { "type": "map_union"
+          , "$1":
+            { "type": "foreach"
+            , "range": {"type": "FIELD", "name": "stages"}
+            , "var": "n"
+            , "body":
+              { "type": "let*"
+              , "bindings":
+                [ [ "script.ed"
+                  , { "type": "singleton_map"
+                    , "key": "script.ed"
+                    , "value":
+                      { "type": "BLOB"
+                      , "data":
+                        { "type": "join"
+                        , "$1":
+                          [ "1\n/\\/stage.*bind def\nd\na\n/stage { "
+                          , {"type": "var", "name": "n"}
+                          , " } bind def\n.\n1\n/\\/drawbb.*bind def\nd\na\n/drawbb { "
+                          , {"type": "var", "name": "drawbb"}
+                          , " } bind def\n.\nw\nq\n"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                , [ "out.eps"
+                  , { "type": "ACTION"
+                    , "inputs":
+                      { "type": "map_union"
+                      , "$1":
+                        [ {"type": "var", "name": "src.eps"}
+                        , {"type": "var", "name": "script.ed"}
+                        ]
+                      }
+                    , "outs": ["out.eps"]
+                    , "cmd":
+                      [ "sh"
+                      , "-c"
+                      , "cp src.eps out.eps && chmod 644 out.eps && { ed out.eps < script.ed > log 2>&1 || { cat log ; exit 1; } }"
+                      ]
+                    }
+                  ]
+                ]
+              , "body":
+                { "type": "singleton_map"
+                , "key":
+                  { "type": "join"
+                  , "$1":
+                    [ {"type": "var", "name": "name"}
+                    , "_"
+                    , {"type": "var", "name": "n"}
+                    , ".eps"
+                    ]
+                  }
+                , "value":
+                  { "type": "lookup"
+                  , "map": {"type": "var", "name": "out.eps"}
+                  , "key": "out.eps"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      , [ "staged outputs"
+        , { "type": "to_subdir"
+          , "subdir": {"type": "var", "name": "stage"}
+          , "$1": {"type": "var", "name": "outputs"}
+          }
+        ]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "artifacts": {"type": "var", "name": "staged outputs"}
+      , "runfiles": {"type": "var", "name": "staged outputs"}
+      }
+    }
+  }
+}

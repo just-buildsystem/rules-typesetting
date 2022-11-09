@@ -1,0 +1,36 @@
+{ "order":
+  { "expression":
+    { "type": "++"
+    , "$1":
+      { "type": "foreach"
+      , "var": "dep"
+      , "range": {"type": "FIELD", "name": "srcs"}
+      , "body":
+        { "type": "if"
+        , "cond":
+          { "type": "DEP_PROVIDES"
+          , "dep": {"type": "var", "name": "dep"}
+          , "provider": "keys"
+          }
+        , "then":
+          { "type": "DEP_PROVIDES"
+          , "dep": {"type": "var", "name": "dep"}
+          , "provider": "keys"
+          }
+        , "else":
+          { "type": "keys"
+          , "$1":
+            { "type": "map_union"
+            , "$1":
+              [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "dep"}}
+              , { "type": "DEP_ARTIFACTS"
+                , "dep": {"type": "var", "name": "dep"}
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
