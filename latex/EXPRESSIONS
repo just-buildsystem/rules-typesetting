@@ -1,0 +1,211 @@
+{ "call latex":
+  { "vars":
+    [ "srcs"
+    , "main"
+    , "deps"
+    , "stage"
+    , "env"
+    , "executable"
+    , "runner"
+    , "runner type"
+    , "opts"
+    , "output file extension"
+    ]
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ [ "stage"
+        , { "type": "join"
+          , "separator": "/"
+          , "$1": {"type": "var", "name": "stage"}
+          }
+        ]
+      , [ "srcs"
+        , { "type": "disjoint_map_union"
+          , "msg": "Sources may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "var", "name": "srcs"}
+            , "body":
+              { "type": "map_union"
+              , "$1":
+                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+                , { "type": "DEP_ARTIFACTS"
+                  , "dep": {"type": "var", "name": "x"}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      , [ "main"
+        , { "type": "assert_non_empty"
+          , "msg": "Entry-point main cannot be empty"
+          , "$1": {"type": "join", "$1": {"type": "var", "name": "main"}}
+          }
+        ]
+      , [ "_"
+        , { "type": "if"
+          , "cond":
+            { "type": "=="
+            , "$1":
+              { "type": "lookup"
+              , "map": {"type": "var", "name": "srcs"}
+              , "key":
+                { "type": "join"
+                , "$1": [{"type": "var", "name": "main"}, ".tex"]
+                }
+              }
+            , "$2": null
+            }
+          , "then":
+            { "type": "fail"
+            , "msg":
+              [ "main not the base name of a .tex file in srcs"
+              , "main has value"
+              , {"type": "var", "name": "main"}
+              , "srcs have file names"
+              , {"type": "keys", "$1": {"type": "var", "name": "srcs"}}
+              ]
+            }
+          }
+        ]
+      , [ "main"
+        , { "type": "if"
+          , "cond":
+            {"type": "==", "$1": {"type": "var", "name": "stage"}, "$2": ""}
+          , "then": {"type": "var", "name": "main"}
+          , "else":
+            { "type": "join"
+            , "separator": "/"
+            , "$1":
+              [ {"type": "var", "name": "stage"}
+              , {"type": "var", "name": "main"}
+              ]
+            }
+          }
+        ]
+      , [ "srcs"
+        , { "type": "to_subdir"
+          , "subdir": {"type": "var", "name": "stage"}
+          , "$1": {"type": "var", "name": "srcs"}
+          }
+        ]
+      , [ "deps"
+        , { "type": "disjoint_map_union"
+          , "msg": "Dependencies may not conflict"
+          , "$1":
+            { "type": "foreach"
+            , "var": "x"
+            , "range": {"type": "var", "name": "deps"}
+            , "body":
+              {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
+            }
+          }
+        ]
+      , [ "tex inputs"
+        , { "type": "to_subdir"
+          , "subdir": "work"
+          , "$1":
+            { "type": "disjoint_map_union"
+            , "msg": "Staging conflict between staged sources and deps"
+            , "$1":
+              [ {"type": "var", "name": "deps"}
+              , {"type": "var", "name": "srcs"}
+              ]
+            }
+          }
+        ]
+      , [ "env"
+        , { "type": "map_union"
+          , "$1":
+            [ { "type": "singleton_map"
+              , "key": "PATH"
+              , "value": "/bin:/usr/bin:/usr/local/bin"
+              }
+            , { "type": "singleton_map"
+              , "key": "SOURCE_DATE_EPOCH"
+              , "value": "0"
+              }
+            , {"type": "var", "name": "env"}
+            ]
+          }
+        ]
+      , [ "cmd"
+        , { "type": "if"
+          , "cond":
+            { "type": "=="
+            , "$1": {"type": "var", "name": "runner type"}
+            , "$2": "latexmk"
+            }
+          , "then":
+            { "type": "++"
+            , "$1":
+              [ ["sh", "runner"]
+              , [{"type": "var", "name": "executable"}]
+              , [{"type": "var", "name": "main"}]
+              , { "type": "if"
+                , "cond": {"type": "var", "name": "opts"}
+                , "then": {"type": "var", "name": "opts"}
+                , "else": ["-pdf"]
+                }
+              ]
+            }
+          , "else":
+            [ "./runner"
+            , {"type": "var", "name": "executable"}
+            , {"type": "var", "name": "main"}
+            ]
+          }
+        ]
+      , [ "output file"
+        , { "type": "ACTION"
+          , "inputs":
+            { "type": "map_union"
+            , "$1":
+              [ {"type": "var", "name": "tex inputs"}
+              , {"type": "var", "name": "runner"}
+              ]
+            }
+          , "outs":
+            [ { "type": "join"
+              , "$1":
+                [ "work/"
+                , {"type": "var", "name": "main"}
+                , { "type": "join"
+                  , "separator": ""
+                  , "$1": {"type": "var", "name": "output file extension"}
+                  }
+                ]
+              }
+            ]
+          , "cmd": {"type": "var", "name": "cmd"}
+          , "env": {"type": "var", "name": "env"}
+          }
+        ]
+      , [ "output file"
+        , { "type": "map_union"
+          , "$1":
+            { "type": "foreach_map"
+            , "var_key": "name"
+            , "var_val": "file"
+            , "range": {"type": "var", "name": "output file"}
+            , "body":
+              { "type": "singleton_map"
+              , "key":
+                {"type": "basename", "$1": {"type": "var", "name": "name"}}
+              , "value": {"type": "var", "name": "file"}
+              }
+            }
+          }
+        ]
+      ]
+    , "body":
+      { "type": "RESULT"
+      , "artifacts": {"type": "var", "name": "output file"}
+      , "runfiles": {"type": "var", "name": "output file"}
+      }
+    }
+  }
+}

@@ -12,6 +12,11 @@ A collection of rules related to typesetting.
     a single `eps` file by replacing the definition of `stage` and
     `drawbb`. While not strictly related to latex, usually used
     for "animated" diagrams in slides.
+  - `["latex", "latexmk"]` Simple rule to call `latexmk`, given a
+    collection of source files and the entry point. The main
+    difference with respect to `standalone` is given by the usage of
+    `latexmk` itself, which runs `latex` the needed number of times
+    eventually calling `bibtex` as well.
 - Pandoc
   - `["pandoc", "standalone"]` Generate a single output file from
     a given list of files in order and a template.
