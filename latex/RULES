@@ -20,7 +20,7 @@
       , "of a .tex file in \"srcs\"; the \"stage\" is prepended automatically."
       ]
     }
-  , "config_fields": ["env", "latex"]
+  , "config_vars": ["env", "latex"]
   , "config_doc":
     { "latex": ["Name of the latex command, defaults to \"pdflatex\"."]
     , "env":
@@ -29,180 +29,31 @@
       ]
     }
   , "implicit": {"runner": ["latex_runner.sh"]}
-  , "imports": {"singleton": ["./", "..", "stage_singleton_field"]}
+  , "imports":
+    { "singleton": ["./", "..", "stage_singleton_field"]
+    , "call latex": "call latex"
+    }
   , "expression":
     { "type": "let*"
     , "bindings":
-      [ [ "stage"
-        , { "type": "join"
-          , "separator": "/"
-          , "$1": {"type": "FIELD", "name": "stage"}
-          }
-        ]
-      , [ "srcs"
-        , { "type": "disjoint_map_union"
-          , "msg": "Sources may not conflict"
-          , "$1":
-            { "type": "foreach"
-            , "var": "x"
-            , "range": {"type": "FIELD", "name": "srcs"}
-            , "body":
-              { "type": "map_union"
-              , "$1":
-                [ {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
-                , { "type": "DEP_ARTIFACTS"
-                  , "dep": {"type": "var", "name": "x"}
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      , [ "main"
-        , { "type": "assert_non_empty"
-          , "msg": "Entry-point main cannot be empty"
-          , "$1": {"type": "join", "$1": {"type": "FIELD", "name": "main"}}
-          }
-        ]
-      , [ "_"
-        , { "type": "if"
-          , "cond":
-            { "type": "=="
-            , "$1":
-              { "type": "lookup"
-              , "map": {"type": "var", "name": "srcs"}
-              , "key":
-                { "type": "join"
-                , "$1": [{"type": "var", "name": "main"}, ".tex"]
-                }
-              }
-            , "$2": null
-            }
-          , "then":
-            { "type": "fail"
-            , "msg":
-              [ "main not the base name of a .tex file in srcs"
-              , "main has value"
-              , {"type": "var", "name": "main"}
-              , "srcs have file names"
-              , {"type": "keys", "$1": {"type": "var", "name": "srcs"}}
-              ]
-            }
-          }
-        ]
-      , [ "main"
-        , { "type": "if"
-          , "cond":
-            {"type": "==", "$1": {"type": "var", "name": "stage"}, "$2": ""}
-          , "then": {"type": "var", "name": "main"}
-          , "else":
-            { "type": "join"
-            , "separator": "/"
-            , "$1":
-              [ {"type": "var", "name": "stage"}
-              , {"type": "var", "name": "main"}
-              ]
-            }
-          }
-        ]
-      , [ "srcs"
-        , { "type": "to_subdir"
-          , "subdir": {"type": "var", "name": "stage"}
-          , "$1": {"type": "var", "name": "srcs"}
-          }
-        ]
-      , [ "deps"
-        , { "type": "disjoint_map_union"
-          , "msg": "Dependencies may not conflict"
-          , "$1":
-            { "type": "foreach"
-            , "var": "x"
-            , "range": {"type": "FIELD", "name": "deps"}
-            , "body":
-              {"type": "DEP_RUNFILES", "dep": {"type": "var", "name": "x"}}
-            }
-          }
-        ]
-      , [ "tex inputs"
-        , { "type": "to_subdir"
-          , "subdir": "work"
-          , "$1":
-            { "type": "disjoint_map_union"
-            , "msg": "Staging conflict between staged sources and deps"
-            , "$1":
-              [ {"type": "var", "name": "deps"}
-              , {"type": "var", "name": "srcs"}
-              ]
-            }
-          }
-        ]
+      [ ["srcs", {"type": "FIELD", "name": "srcs"}]
+      , ["main", {"type": "FIELD", "name": "main"}]
+      , ["deps", {"type": "FIELD", "name": "deps"}]
+      , ["stage", {"type": "FIELD", "name": "stage"}]
+      , ["output file extension", [".pdf"]]
       , [ "env"
-        , { "type": "map_union"
-          , "$1":
-            [ { "type": "singleton_map"
-              , "key": "PATH"
-              , "value": "/bin:/usr/bin:/usr/local/bin"
-              }
-            , { "type": "singleton_map"
-              , "key": "SOURCE_DATE_EPOCH"
-              , "value": "0"
-              }
-            , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
-            ]
-          }
+        , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
         ]
+      , ["executable", {"type": "var", "name": "latex", "default": "pdflatex"}]
       , [ "runner"
         , { "type": "let*"
           , "bindings": [["fieldname", "runner"], ["location", "runner"]]
           , "body": {"type": "CALL_EXPRESSION", "name": "singleton"}
           }
         ]
-      , [ "cmd"
-        , [ "./runner"
-          , {"type": "var", "name": "latex", "default": "pdflatex"}
-          , {"type": "var", "name": "main"}
-          ]
-        ]
-      , [ "pdf"
-        , { "type": "ACTION"
-          , "inputs":
-            { "type": "map_union"
-            , "$1":
-              [ {"type": "var", "name": "tex inputs"}
-              , {"type": "var", "name": "runner"}
-              ]
-            }
-          , "outs":
-            [ { "type": "join"
-              , "$1": ["work/", {"type": "var", "name": "main"}, ".pdf"]
-              }
-            ]
-          , "cmd": {"type": "var", "name": "cmd"}
-          , "env": {"type": "var", "name": "env"}
-          }
-        ]
-      , [ "pdf"
-        , { "type": "map_union"
-          , "$1":
-            { "type": "foreach_map"
-            , "var_key": "name"
-            , "var_val": "file"
-            , "range": {"type": "var", "name": "pdf"}
-            , "body":
-              { "type": "singleton_map"
-              , "key":
-                {"type": "basename", "$1": {"type": "var", "name": "name"}}
-              , "value": {"type": "var", "name": "file"}
-              }
-            }
-          }
-        ]
+      , ["runner type", "standalone"]
       ]
-    , "body":
-      { "type": "RESULT"
-      , "artifacts": {"type": "var", "name": "pdf"}
-      , "runfiles": {"type": "var", "name": "pdf"}
-      }
+    , "body": {"type": "CALL_EXPRESSION", "name": "call latex"}
     }
   }
 , "verbatim":
@@ -309,6 +160,90 @@
       , "artifacts": {"type": "var", "name": "staged verbatim files"}
       , "runfiles": {"type": "var", "name": "staged verbatim files"}
       }
+    }
+  }
+, "latexmk":
+  { "doc":
+    [ "A latexmk run"
+    , ""
+    , "Call latexmk passing main as the entry point. A correct staging"
+    , "of the needed files has to be given through the runfiles of \"deps\"."
+    ]
+  , "target_fields": ["deps", "srcs"]
+  , "string_fields": ["main", "stage", "opts", "output extension"]
+  , "field_doc":
+    { "srcs": ["The files needed for the latexmk run."]
+    , "stage":
+      [ "The directory the \"srcs\" logically reside in."
+      , "Entries are joined with \"/\"."
+      ]
+    , "deps":
+      ["Runfiles needed for the run of the standalone latex invocation"]
+    , "main":
+      [ "The entry point for the latex run; should be the base name"
+      , "of a .tex file in \"srcs\"; the \"stage\" is prepended automatically."
+      ]
+    , "opts":
+      ["The latexmk options to be used.", "If omitted, \"-pdf\" is assumed"]
+    , "output extension":
+      [ "The extension of the output to be produced (e.g., \".ps\", \".pdf\")."
+      , "If omitted, \".pdf\" is assumed."
+      ]
+    }
+  , "config_vars": ["env", "latexmk"]
+  , "config_doc":
+    { "env":
+      [ "Any override to the default environment which sets only"
+      , "PATH and SOURCE_DATE_EPOCH"
+      ]
+    , "latexmk": ["Name of the latexmk command, defaults to \"latexmk\"."]
+    }
+  , "imports": {"call latex": "call latex"}
+  , "expression":
+    { "type": "let*"
+    , "bindings":
+      [ ["srcs", {"type": "FIELD", "name": "srcs"}]
+      , ["main", {"type": "FIELD", "name": "main"}]
+      , ["deps", {"type": "FIELD", "name": "deps"}]
+      , ["stage", {"type": "FIELD", "name": "stage"}]
+      , [ "output file extension"
+        , { "type": "if"
+          , "cond": {"type": "FIELD", "name": "output extension"}
+          , "then": {"type": "FIELD", "name": "output extension"}
+          , "else": [".pdf"]
+          }
+        ]
+      , [ "env"
+        , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
+        ]
+      , [ "executable"
+        , {"type": "var", "name": "latexmk", "default": "latexmk"}
+        ]
+      , ["opts", {"type": "FIELD", "name": "opts"}]
+      , [ "runner"
+        , { "type": "singleton_map"
+          , "key": "runner"
+          , "value":
+            { "type": "BLOB"
+            , "data":
+              { "type": "join"
+              , "separator": "\n"
+              , "$1":
+                [ "set -e"
+                , "LATEXMK=\"$1\""
+                , "shift"
+                , "MAIN=\"$1\""
+                , "shift"
+                , "cd work"
+                , "\"$LATEXMK\" -output-directory=\"$(dirname \"$MAIN\")\" \"$@\"  \"$MAIN\" > log 2>&1 || (cat log && exit 1)"
+                ]
+              }
+            }
+          }
+        ]
+      , ["runner type", "latexmk"]
+      ]
+    , "body": {"type": "CALL_EXPRESSION", "name": "call latex"}
     }
   }
 }
