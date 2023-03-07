@@ -101,16 +101,26 @@
                 [ [ "action out"
                   , { "type": "ACTION"
                     , "inputs":
-                      { "type": "singleton_map"
-                      , "key": "in"
-                      , "value": {"type": "var", "name": "input"}
+                      { "type": "map_union"
+                      , "$1":
+                        [ { "type": "singleton_map"
+                          , "key": "in"
+                          , "value": {"type": "var", "name": "input"}
+                          }
+                        , { "type": "singleton_map"
+                          , "key": "begin"
+                          , "value":
+                            {"type": "BLOB", "data": "\\begin{verbatim}\n"}
+                          }
+                        , { "type": "singleton_map"
+                          , "key": "end"
+                          , "value":
+                            {"type": "BLOB", "data": "\\end{verbatim}\n"}
+                          }
+                        ]
                       }
                     , "outs": ["out"]
-                    , "cmd":
-                      [ "sh"
-                      , "-c"
-                      , "echo '\\\\begin{verbatim}' > out && cat in >> out && echo '\\\\end{verbatim}' >> out"
-                      ]
+                    , "cmd": ["sh", "-c", "cat begin in end > out"]
                     }
                   ]
                 , [ "out"
