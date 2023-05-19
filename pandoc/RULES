@@ -150,7 +150,7 @@
   }
 , "standalone":
   { "doc": ["Create a standalone document from the given inputs"]
-  , "target_fields": ["srcs", "template", "data"]
+  , "target_fields": ["srcs", "template", "data", "meta data files"]
   , "string_fields": ["out", "meta data"]
   , "field_doc":
     { "srcs":
@@ -165,6 +165,8 @@
       [ "Additional meta data to be set. Each entry has to have the"
       , "form \"key=value\"."
       ]
+    , "meta data files":
+      ["Additional meta data files to be taken into account"]
     }
   , "config_vars": ["env"]
   , "config_doc":
@@ -391,6 +393,38 @@
           , "body": {"type": "CALL_EXPRESSION", "name": "stage"}
           }
         ]
+      , [ "extra metadata files"
+        , { "type": "++"
+          , "$1":
+            { "type": "foreach"
+            , "range": {"type": "FIELD", "name": "meta data files"}
+            , "body":
+              { "type": "values"
+              , "$1":
+                {"type": "DEP_ARTIFACTS", "dep": {"type": "var", "name": "_"}}
+              }
+            }
+          }
+        ]
+      , [ "staged extra metadata"
+        , { "type": "map_union"
+          , "$1":
+            { "type": "foreach_map"
+            , "range":
+              { "type": "enumerate"
+              , "$1": {"type": "var", "name": "extra metadata files"}
+              }
+            , "body":
+              { "type": "singleton_map"
+              , "key":
+                { "type": "join"
+                , "$1": ["metadta", {"type": "var", "name": "_"}, ".yaml"]
+                }
+              , "value": {"type": "var", "name": "$_"}
+              }
+            }
+          }
+        ]
       , [ "generated"
         , { "type": "ACTION"
           , "inputs":
@@ -400,6 +434,7 @@
               , {"type": "var", "name": "data"}
               , {"type": "var", "name": "lua filters"}
               , {"type": "var", "name": "metadata"}
+              , {"type": "var", "name": "staged extra metadata"}
               ]
             }
           , "outs": [{"type": "var", "name": "out"}]
@@ -421,6 +456,16 @@
                   ["--template", {"type": "var", "name": "template-name"}]
                 }
               , ["--metadata-file", "metadata.yaml"]
+              , { "type": "++"
+                , "$1":
+                  { "type": "foreach"
+                  , "range":
+                    { "type": "keys"
+                    , "$1": {"type": "var", "name": "staged extra metadata"}
+                    }
+                  , "body": ["--metadata-file", {"type": "var", "name": "_"}]
+                  }
+                }
               , {"type": "var", "name": "template-args"}
               , {"type": "var", "name": "filter args"}
               , {"type": "var", "name": "meta data args"}
