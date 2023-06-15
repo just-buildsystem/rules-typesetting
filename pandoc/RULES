@@ -168,11 +168,15 @@
     , "meta data files":
       ["Additional meta data files to be taken into account"]
     }
-  , "config_vars": ["env"]
+  , "config_vars": ["env", "TYPESETTING_EXECUTION_PROPERTIES"]
   , "config_doc":
     { "env":
       [ "Any override to the default environment which sets only"
       , "PATH, SOURCE_DATE_EPOCH, and TEXINPUTS"
+      ]
+    , "TYPESETTING_EXECUTION_PROPERTIES":
+      [ "Map of additional remote-execution properties to add for the typesetting"
+      , "actions; defaults to the empty map."
       ]
     }
   , "implicit": {"metadata": [["./", ".", "metadata"]]}
@@ -471,6 +475,11 @@
               , {"type": "var", "name": "meta data args"}
               , {"type": "var", "name": "src names"}
               ]
+            }
+          , "execution properties":
+            { "type": "var"
+            , "name": "TYPESETTING_EXECUTION_PROPERTIES"
+            , "default": {"type": "empty_map"}
             }
           }
         ]

@@ -10,6 +10,7 @@
     , "runner type"
     , "opts"
     , "output file extension"
+    , "TYPESETTING_EXECUTION_PROPERTIES"
     ]
   , "expression":
     { "type": "let*"
@@ -182,6 +183,11 @@
             ]
           , "cmd": {"type": "var", "name": "cmd"}
           , "env": {"type": "var", "name": "env"}
+          , "execution properties":
+            { "type": "var"
+            , "name": "TYPESETTING_EXECUTION_PROPERTIES"
+            , "default": {"type": "empty_map"}
+            }
           }
         ]
       , [ "output file"
