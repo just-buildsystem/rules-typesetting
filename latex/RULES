@@ -20,12 +20,16 @@
       , "of a .tex file in \"srcs\"; the \"stage\" is prepended automatically."
       ]
     }
-  , "config_vars": ["env", "latex"]
+  , "config_vars": ["env", "latex", "TYPESETTING_EXECUTION_PROPERTIES"]
   , "config_doc":
     { "latex": ["Name of the latex command, defaults to \"pdflatex\"."]
     , "env":
       [ "Any override to the default environment which sets only"
       , "PATH and SOURCE_DATE_EPOCH"
+      ]
+    , "TYPESETTING_EXECUTION_PROPERTIES":
+      [ "Map of additional remote-execution properties to add for the typesetting"
+      , "actions; defaults to the empty map."
       ]
     }
   , "implicit": {"runner": ["latex_runner.sh"]}
@@ -200,13 +204,17 @@
       , "If omitted, \".pdf\" is assumed."
       ]
     }
-  , "config_vars": ["env", "latexmk"]
+  , "config_vars": ["env", "latexmk", "TYPESETTING_EXECUTION_PROPERTIES"]
   , "config_doc":
     { "env":
       [ "Any override to the default environment which sets only"
       , "PATH and SOURCE_DATE_EPOCH"
       ]
     , "latexmk": ["Name of the latexmk command, defaults to \"latexmk\"."]
+    , "TYPESETTING_EXECUTION_PROPERTIES":
+      [ "Map of additional remote-execution properties to add for the typesetting"
+      , "actions; defaults to the empty map."
+      ]
     }
   , "imports": {"call latex": "call latex"}
   , "expression":
