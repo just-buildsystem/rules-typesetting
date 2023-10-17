@@ -151,7 +151,7 @@
 , "standalone":
   { "doc": ["Create a standalone document from the given inputs"]
   , "target_fields": ["srcs", "template", "data", "meta data files"]
-  , "string_fields": ["out", "meta data"]
+  , "string_fields": ["out", "meta data", "via"]
   , "field_doc":
     { "srcs":
       [ "The files to build the document from, in order."
@@ -167,6 +167,11 @@
       ]
     , "meta data files":
       ["Additional meta data files to be taken into account"]
+    , "via":
+      [ "If a non-empty string is given, first convert all input files to this"
+      , "format, if not of this format already."
+      , "(entries in this field are concatenated)"
+      ]
     }
   , "config_vars": ["env", "TYPESETTING_EXECUTION_PROPERTIES"]
   , "config_doc":
@@ -193,6 +198,22 @@
           , "$1": {"type": "join", "$1": {"type": "FIELD", "name": "out"}}
           }
         ]
+      , [ "env"
+        , { "type": "map_union"
+          , "$1":
+            [ { "type": "singleton_map"
+              , "key": "PATH"
+              , "value": "/bin:/usr/bin:/usr/local/bin"
+              }
+            , { "type": "singleton_map"
+              , "key": "SOURCE_DATE_EPOCH"
+              , "value": "0"
+              }
+            , {"type": "singleton_map", "key": "TEXINPUTS", "value": "data:"}
+            , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
+            ]
+          }
+        ]
       , [ "srcs"
         , { "type": "disjoint_map_union"
           , "msg": "Sources may not conflict"
@@ -210,12 +231,6 @@
                 ]
               }
             }
-          }
-        ]
-      , [ "srcs"
-        , { "type": "to_subdir"
-          , "subdir": "srcs"
-          , "$1": {"type": "var", "name": "srcs"}
           }
         ]
       , [ "extra"
@@ -241,6 +256,77 @@
         , { "type": "to_subdir"
           , "subdir": "data"
           , "$1": {"type": "var", "name": "extra"}
+          }
+        ]
+      , ["via", {"type": "join", "$1": {"type": "FIELD", "name": "via"}}]
+      , [".via", {"type": "join", "$1": [".", {"type": "var", "name": "via"}]}]
+      , [ "srcs"
+        , { "type": "if"
+          , "cond": {"type": "var", "name": "via"}
+          , "else": {"type": "var", "name": "srcs"}
+          , "then":
+            { "type": "disjoint_map_union"
+            , "msg": "Converted files must not overlap"
+            , "$1":
+              { "type": "foreach_map"
+              , "range": {"type": "var", "name": "srcs"}
+              , "body":
+                { "type": "let*"
+                , "bindings":
+                  [ [ "old"
+                    , { "type": "singleton_map"
+                      , "key": {"type": "var", "name": "_"}
+                      , "value": {"type": "var", "name": "$_"}
+                      }
+                    ]
+                  , [ "new_name"
+                    , { "type": "change_ending"
+                      , "ending": {"type": "var", "name": ".via"}
+                      , "$1": {"type": "var", "name": "_"}
+                      }
+                    ]
+                  ]
+                , "body":
+                  { "type": "if"
+                  , "cond":
+                    { "type": "=="
+                    , "$1": {"type": "var", "name": "_"}
+                    , "$2": {"type": "var", "name": "new_name"}
+                    }
+                  , "then": {"type": "var", "name": "old"}
+                  , "else":
+                    { "type": "ACTION"
+                    , "inputs":
+                      { "type": "map_union"
+                      , "$1":
+                        [ {"type": "var", "name": "extra"}
+                        , {"type": "var", "name": "old"}
+                        ]
+                      }
+                    , "outs": [{"type": "var", "name": "new_name"}]
+                    , "env": {"type": "var", "name": "env"}
+                    , "cmd":
+                      [ "pandoc"
+                      , "-o"
+                      , {"type": "var", "name": "new_name"}
+                      , {"type": "var", "name": "_"}
+                      ]
+                    , "execution properties":
+                      { "type": "var"
+                      , "name": "TYPESETTING_EXECUTION_PROPERTIES"
+                      , "default": {"type": "empty_map"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      , [ "srcs"
+        , { "type": "to_subdir"
+          , "subdir": "srcs"
+          , "$1": {"type": "var", "name": "srcs"}
           }
         ]
       , [ "data"
@@ -346,6 +432,21 @@
         ]
       , ["src names", {"type": "CALL_EXPRESSION", "name": "src names"}]
       , [ "src names"
+        , { "type": "if"
+          , "cond": {"type": "var", "name": "via"}
+          , "else": {"type": "var", "name": "src names"}
+          , "then":
+            { "type": "foreach"
+            , "range": {"type": "var", "name":"src names"}
+            , "body":
+              { "type": "change_ending"
+              , "ending": {"type": "var", "name": ".via"}
+              , "$1": {"type": "var", "name": "_"}
+              }
+            }
+          }
+        ]
+      , [ "src names"
         , { "type": "foreach"
           , "var": "name"
           , "range": {"type": "var", "name": "src names"}
@@ -372,22 +473,6 @@
               {"type": "keys", "$1": {"type": "var", "name": "lua filters"}}
             , "body": ["--lua-filter", {"type": "var", "name": "x"}]
             }
-          }
-        ]
-      , [ "env"
-        , { "type": "map_union"
-          , "$1":
-            [ { "type": "singleton_map"
-              , "key": "PATH"
-              , "value": "/bin:/usr/bin:/usr/local/bin"
-              }
-            , { "type": "singleton_map"
-              , "key": "SOURCE_DATE_EPOCH"
-              , "value": "0"
-              }
-            , {"type": "singleton_map", "key": "TEXINPUTS", "value": "data:"}
-            , {"type": "var", "name": "env", "default": {"type": "empty_map"}}
-            ]
           }
         ]
       , [ "metadata"
