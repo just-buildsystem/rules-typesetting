@@ -72,6 +72,9 @@
     , "prefix": ["Additional prefix to add to the output file name"]
     , "stage": ["The logical directory to stage the outputs to"]
     }
+  , "config_vars": ["env"]
+  , "config_doc":
+    {"env": ["Any override to the default environment which sets only PATH."]}
   , "expression":
     { "type": "let*"
     , "bindings":
@@ -125,6 +128,19 @@
                       }
                     , "outs": ["out"]
                     , "cmd": ["sh", "-c", "cat begin in end > out"]
+                    , "env":
+                      { "type": "map_union"
+                      , "$1":
+                        [ { "type": "singleton_map"
+                          , "key": "PATH"
+                          , "value": "/bin:/usr/bin:/usr/local/bin"
+                          }
+                        , { "type": "var"
+                          , "name": "env"
+                          , "default": {"type": "empty_map"}
+                          }
+                        ]
+                      }
                     }
                   ]
                 , [ "out"
