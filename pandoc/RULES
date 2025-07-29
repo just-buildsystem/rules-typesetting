@@ -78,7 +78,7 @@
 , "metadata":
   { "doc":
     ["Generate a file with meta data from data provided through context"]
-  , "config_vars": ["SOURCE_DATE_EPOCH", "DATE_FORMAT"]
+  , "config_vars": ["SOURCE_DATE_EPOCH", "DATE_FORMAT", "env"]
   , "config_doc":
     { "SOURCE_DATE_EPOCH":
       [ "The timestamp to include (in seconds since Jan 1, 1970 00:00 UTC);"
@@ -86,6 +86,7 @@
       ]
     , "DATE_FORMAT":
       ["The format to use for time stamps (defaults to \"%Y-%m-%d %H:%M\")."]
+    , "env": ["Any override to the default environment which sets only PATH."]
     }
   , "expression":
     { "type": "let*"
@@ -141,6 +142,19 @@
             , "key": "generate"
             , "value":
               {"type": "BLOB", "data": {"type": "var", "name": "script"}}
+            }
+          , "env":
+            { "type": "map_union"
+            , "$1":
+              [ { "type": "singleton_map"
+                , "key": "PATH"
+                , "value": "/bin:/usr/bin:/usr/local/bin"
+                }
+              , { "type": "var"
+                , "name": "env"
+                , "default": {"type": "empty_map"}
+                }
+              ]
             }
           }
         ]
@@ -437,7 +451,7 @@
           , "else": {"type": "var", "name": "src names"}
           , "then":
             { "type": "foreach"
-            , "range": {"type": "var", "name":"src names"}
+            , "range": {"type": "var", "name": "src names"}
             , "body":
               { "type": "change_ending"
               , "ending": {"type": "var", "name": ".via"}
